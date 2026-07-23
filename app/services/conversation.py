@@ -211,3 +211,28 @@ class ConversationService:
         )
         result = await db.exec(stmt)
         return list(result.all())
+
+    @staticmethod
+    async def delete_conversation(db: AsyncSession, conversation_id: uuid.UUID) -> bool:
+        """Permanently delete a conversation and all its messages"""
+        from app.models.message import Message
+        from sqlmodel import select as sql_select
+
+        conversation = await ConversationService.get_by_id(db, conversation_id)
+        if not conversation:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Conversation not found"
+            )
+
+        # Delete all messages belonging to this conversation first
+        messages_stmt = sql_select(Message).where(Message.conversation_id == conversation_id)
+        msg_result = await db.exec(messages_stmt)
+        for message in msg_result.all():
+            await db.delete(message)
+
+        # Then delete the conversation itself
+        await db.delete(conversation)
+        await db.commit()
+        return True
+

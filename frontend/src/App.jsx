@@ -220,6 +220,18 @@ export default function App() {
         setActiveChats((prev) => prev.map(updater));
         setClosedChats((prev) => prev.map(updater));
         setAllChats((prev) => prev.map(updater));
+      } else if (data.type === "conversation_deleted") {
+        const deletedId = data.conversation_id;
+        // Remove from all queues immediately
+        setWaitingChats((prev) => prev.filter((c) => c.id !== deletedId));
+        setActiveChats((prev) => prev.filter((c) => c.id !== deletedId));
+        setClosedChats((prev) => prev.filter((c) => c.id !== deletedId));
+        setAllChats((prev) => prev.filter((c) => c.id !== deletedId));
+        // Deselect if currently viewing the deleted conversation
+        if (selectedChatIdRef.current === deletedId) {
+          setSelectedChatId(null);
+          setMessages([]);
+        }
       }
     };
 
@@ -275,6 +287,33 @@ export default function App() {
         // Remove from active, add to closed
         setActiveChats((prev) => prev.filter((c) => c.id !== chatId));
         setClosedChats((prev) => [updatedChat, ...prev]);
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const handleDeleteConversation = async (chatId) => {
+    if (!window.confirm("Permanently delete this conversation and all its messages? This cannot be undone.")) return;
+    try {
+      const res = await fetch(`/conversations/${chatId}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (res.ok) {
+        // Remove from all local queues
+        setWaitingChats((prev) => prev.filter((c) => c.id !== chatId));
+        setActiveChats((prev) => prev.filter((c) => c.id !== chatId));
+        setClosedChats((prev) => prev.filter((c) => c.id !== chatId));
+        setAllChats((prev) => prev.filter((c) => c.id !== chatId));
+        // Deselect if currently viewing
+        if (selectedChatId === chatId) {
+          setSelectedChatId(null);
+          setMessages([]);
+        }
+      } else {
+        const err = await res.json();
+        alert(err.detail || "Delete failed.");
       }
     } catch (e) {
       console.error(e);
@@ -351,6 +390,7 @@ export default function App() {
           onSendMessage={handleSendMessage}
           onAcceptChat={handleAcceptChat}
           onCloseChat={handleCloseChat}
+          onDeleteConversation={handleDeleteConversation}
           employeeId={user?.employee_id}
           role={user?.role}
         />

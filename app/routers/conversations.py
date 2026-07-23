@@ -219,3 +219,39 @@ async def change_visitor_name(
     })
 
     return enriched
+
+@router.delete("/{conversation_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_conversation(
+    conversation_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_employee: Employee = Depends(get_current_employee)
+):
+    """
+    Permanently delete a conversation and all its messages.
+    Employees can only delete their own assigned conversations.
+    Admins can delete any conversation.
+    """
+    conversation = await ConversationService.get_by_id(db, conversation_id)
+    if not conversation:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Conversation not found"
+        )
+
+    # Permission: assigned employee or Admin
+    if (conversation.assigned_employee_id != current_employee.id and
+            current_employee.role != EmployeeRole.ADMIN):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You are not authorized to delete this conversation"
+        )
+
+    await ConversationService.delete_conversation(db, conversation_id)
+
+    # Notify all agents to remove this conversation from their lists
+    await manager.broadcast_to_agents({
+        "type": "conversation_deleted",
+        "conversation_id": str(conversation_id)
+    })
+
+    return None

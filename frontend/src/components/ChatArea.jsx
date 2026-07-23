@@ -6,6 +6,7 @@ export default function ChatArea({
   onSendMessage,
   onAcceptChat,
   onCloseChat,
+  onDeleteConversation,
   employeeId,
   role
 }) {
@@ -63,13 +64,16 @@ export default function ChatArea({
     );
   }
 
-  // Perm checks
+  // Permission checks
   const isWaiting = activeChat.status === "WAITING";
-  const isActive = activeChat.status === "ACTIVE";
-  const isClosed = activeChat.status === "CLOSED";
+  const isActive  = activeChat.status === "ACTIVE";
+  const isClosed  = activeChat.status === "CLOSED";
   const isAssignedToMe = activeChat.assigned_employee_id === employeeId;
-  const canSend = isActive && isAssignedToMe;
-  const canClose = isActive && (isAssignedToMe || role === "ADMIN");
+  const isAdmin   = role === "ADMIN";
+  const canSend   = isActive && isAssignedToMe;
+  const canClose  = isActive && (isAssignedToMe || isAdmin);
+  // Employee can delete only their own conversations; admin can delete any
+  const canDelete = isAdmin || isAssignedToMe;
 
   return (
     <div className="flex-1 bg-darkbg flex flex-col h-full">
@@ -114,6 +118,19 @@ export default function ChatArea({
               className="bg-red-950/60 border border-red-800/40 text-red-300 hover:bg-red-900/40 font-semibold px-4 py-2 rounded-xl text-xs transition-colors"
             >
               Close Chat
+            </button>
+          )}
+
+          {canDelete && (
+            <button
+              onClick={() => onDeleteConversation(activeChat.id)}
+              title="Permanently delete this conversation"
+              className="bg-red-950/80 border border-red-700/50 text-red-400 hover:bg-red-900/60 hover:text-red-300 p-2 rounded-xl transition-colors"
+            >
+              {/* Trash icon */}
+              <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+              </svg>
             </button>
           )}
         </div>
