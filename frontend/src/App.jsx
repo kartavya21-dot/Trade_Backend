@@ -262,11 +262,11 @@ export default function App() {
         headers: { Authorization: `Bearer ${token}` }
       });
       if (res.ok) {
-        const updatedChat = await res.json();
-        
-        // Remove from waiting, add to active
+        // Optimistically remove from the waiting queue immediately for snappy UX.
+        // The WebSocket "conversation_updated" event will handle adding it to activeChats
+        // with its built-in duplicate guard — doing it here too causes a double-render
+        // due to React state closure timing between the fetch and the WS callback.
         setWaitingChats((prev) => prev.filter((c) => c.id !== chatId));
-        setActiveChats((prev) => [updatedChat, ...prev]);
         setSelectedChatId(chatId);
         setActiveTab("active");
       }
