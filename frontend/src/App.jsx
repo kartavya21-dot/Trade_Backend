@@ -7,7 +7,9 @@ import EmployeeManager from "./components/EmployeeManager";
 
 export default function App() {
   const [token, setToken] = useState(localStorage.getItem("token") || "");
-  const [user, setUser] = useState(JSON.parse(localStorage.getItem("user") || "null"));
+  const [user, setUser] = useState(
+    JSON.parse(localStorage.getItem("user") || "null"),
+  );
 
   // Chat queues
   const [waitingChats, setWaitingChats] = useState([]);
@@ -33,17 +35,8 @@ export default function App() {
       o.connect(g);
       g.connect(ctx.destination);
 
-      if (type === "new_chat") {
-        // Two-tone ascending chime for new visitor
-        o.type = "sine";
-        o.frequency.setValueAtTime(520, ctx.currentTime);
-        o.frequency.setValueAtTime(780, ctx.currentTime + 0.12);
-        g.gain.setValueAtTime(0.35, ctx.currentTime);
-        g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.45);
-        o.start(ctx.currentTime);
-        o.stop(ctx.currentTime + 0.45);
-      } else {
-        // Gentle two-stage descending chime for incoming message
+      if (type === "message") {
+        // Gentle 3-stage descending chime for incoming message (~0.75s)
         o.type = "sine";
         o.frequency.setValueAtTime(740, ctx.currentTime);
         o.frequency.setValueAtTime(620, ctx.currentTime + 0.15);
@@ -53,6 +46,15 @@ export default function App() {
         g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.75);
         o.start(ctx.currentTime);
         o.stop(ctx.currentTime + 0.75);
+      } else {
+        // Two-tone ascending chime for new visitor chat (~0.45s)
+        o.type = "triangle";
+        o.frequency.setValueAtTime(523.25, ctx.currentTime); // C5
+        o.frequency.setValueAtTime(783.99, ctx.currentTime + 0.12); // G5
+        g.gain.setValueAtTime(0.2, ctx.currentTime);
+        g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.45);
+        o.start(ctx.currentTime);
+        o.stop(ctx.currentTime + 0.45);
       }
     } catch (e) {
       // Web Audio not available — silent fail
@@ -101,7 +103,7 @@ export default function App() {
     if (!token) return;
     try {
       const headers = { Authorization: `Bearer ${token}` };
-      
+
       // 1. Fetch waiting
       const resWaiting = await fetch("/conversations/waiting", { headers });
       if (resWaiting.ok) setWaitingChats(await resWaiting.json());
@@ -137,7 +139,7 @@ export default function App() {
     if (!token || !chatId) return;
     try {
       const res = await fetch(`/conversations/${chatId}/messages`, {
-        headers: { Authorization: `Bearer ${token}` }
+        headers: { Authorization: `Bearer ${token}` },
       });
       if (res.ok) {
         setMessages(await res.json());
@@ -189,7 +191,7 @@ export default function App() {
         playNotification("new_chat");
       } else if (data.type === "conversation_updated") {
         const updatedConv = data.conversation;
-        
+
         // 1. Update waiting list
         setWaitingChats((prev) => {
           if (updatedConv.status !== "WAITING") {
@@ -200,7 +202,10 @@ export default function App() {
 
         // 2. Update active chats (assigned to me)
         setActiveChats((prev) => {
-          if (updatedConv.status === "ACTIVE" && updatedConv.assigned_employee_id === user?.employee_id) {
+          if (
+            updatedConv.status === "ACTIVE" &&
+            updatedConv.assigned_employee_id === user?.employee_id
+          ) {
             if (!prev.some((c) => c.id === updatedConv.id)) {
               return [updatedConv, ...prev];
             }
@@ -296,7 +301,7 @@ export default function App() {
         JSON.stringify({
           conversation_id: selectedChatId,
           message: text,
-        })
+        }),
       );
     }
   };
@@ -305,7 +310,7 @@ export default function App() {
     try {
       const res = await fetch(`/conversations/${chatId}/accept`, {
         method: "POST",
-        headers: { Authorization: `Bearer ${token}` }
+        headers: { Authorization: `Bearer ${token}` },
       });
       if (res.ok) {
         // Optimistically remove from the waiting queue immediately for snappy UX.
@@ -325,11 +330,11 @@ export default function App() {
     try {
       const res = await fetch(`/conversations/${chatId}/close`, {
         method: "POST",
-        headers: { Authorization: `Bearer ${token}` }
+        headers: { Authorization: `Bearer ${token}` },
       });
       if (res.ok) {
         const updatedChat = await res.json();
-        
+
         // Remove from active, add to closed
         setActiveChats((prev) => prev.filter((c) => c.id !== chatId));
         setClosedChats((prev) => [updatedChat, ...prev]);
@@ -340,11 +345,16 @@ export default function App() {
   };
 
   const handleDeleteConversation = async (chatId) => {
-    if (!window.confirm("Permanently delete this conversation and all its messages? This cannot be undone.")) return;
+    if (
+      !window.confirm(
+        "Permanently delete this conversation and all its messages? This cannot be undone.",
+      )
+    )
+      return;
     try {
       const res = await fetch(`/conversations/${chatId}`, {
         method: "DELETE",
-        headers: { Authorization: `Bearer ${token}` }
+        headers: { Authorization: `Bearer ${token}` },
       });
       if (res.ok) {
         // Remove from all local queues
@@ -372,28 +382,32 @@ export default function App() {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`
+          Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify(payload)
+        body: JSON.stringify(payload),
       });
-      
+
       if (res.ok) {
         const updatedVisitor = await res.json();
-        
+
         // Broadcast updates trigger ws event, but we can proactively update UI fields
         const updater = (c) => {
-          if (c.visitor_uuid === payload.uuid || c.visitor_id === updatedVisitor.id) {
+          if (
+            c.visitor_uuid === payload.uuid ||
+            c.visitor_id === updatedVisitor.id
+          ) {
             return {
               ...c,
               visitor_name: updatedVisitor.name,
               visitor_phone: updatedVisitor.phone,
               visitor_email: updatedVisitor.email,
-              visitor_display_name: updatedVisitor.name || c.visitor_display_name
+              visitor_display_name:
+                updatedVisitor.name || c.visitor_display_name,
             };
           }
           return c;
         };
-        
+
         setWaitingChats((prev) => prev.map(updater));
         setActiveChats((prev) => prev.map(updater));
         setClosedChats((prev) => prev.map(updater));
