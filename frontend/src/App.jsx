@@ -22,6 +22,7 @@ export default function App() {
   const [messages, setMessages] = useState([]);
   const [activeTab, setActiveTab] = useState("waiting"); // waiting, active, closed, all, employees
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [unreadCounts, setUnreadCounts] = useState({}); // { [chatId]: number }
 
   const wsRef = useRef(null);
   const selectedChatIdRef = useRef(null);
@@ -151,6 +152,12 @@ export default function App() {
 
   useEffect(() => {
     if (selectedChatId) {
+      setUnreadCounts((prev) => {
+        if (!prev[selectedChatId]) return prev;
+        const next = { ...prev };
+        delete next[selectedChatId];
+        return next;
+      });
       fetchMessages(selectedChatId);
     }
   }, [selectedChatId]);
@@ -188,6 +195,13 @@ export default function App() {
           if (prev.some((c) => c.id === data.conversation.id)) return prev;
           return [data.conversation, ...prev];
         });
+        // Increment unread count if not currently open
+        if (data.conversation.id !== selectedChatIdRef.current) {
+          setUnreadCounts((prev) => ({
+            ...prev,
+            [data.conversation.id]: (prev[data.conversation.id] || 0) + 1,
+          }));
+        }
         playNotification("new_chat");
       } else if (data.type === "conversation_updated") {
         const updatedConv = data.conversation;
@@ -246,6 +260,12 @@ export default function App() {
             if (prev.some((m) => m.id === msg.id)) return prev;
             return [...prev, msg];
           });
+        } else if (msg.sender_type === "VISITOR") {
+          // Increment unread count for chats that are not currently focused
+          setUnreadCounts((prev) => ({
+            ...prev,
+            [msg.conversation_id]: (prev[msg.conversation_id] || 0) + 1,
+          }));
         }
         // Play sound for incoming messages from visitors (not echoes of own sends)
         if (msg.sender_type === "VISITOR") {
@@ -278,6 +298,12 @@ export default function App() {
         setActiveChats((prev) => prev.filter((c) => c.id !== deletedId));
         setClosedChats((prev) => prev.filter((c) => c.id !== deletedId));
         setAllChats((prev) => prev.filter((c) => c.id !== deletedId));
+        setUnreadCounts((prev) => {
+          if (!prev[deletedId]) return prev;
+          const next = { ...prev };
+          delete next[deletedId];
+          return next;
+        });
         // Deselect if currently viewing the deleted conversation
         if (selectedChatIdRef.current === deletedId) {
           setSelectedChatId(null);
@@ -433,7 +459,17 @@ export default function App() {
         closedChats={closedChats}
         allChats={allChats}
         selectedChatId={selectedChatId}
-        onSelectChat={setSelectedChatId}
+        onSelectChat={(chatId) => {
+          setSelectedChatId(chatId);
+          if (chatId) {
+            setUnreadCounts((prev) => {
+              if (!prev[chatId]) return prev;
+              const next = { ...prev };
+              delete next[chatId];
+              return next;
+            });
+          }
+        }}
         activeTab={activeTab}
         setActiveTab={setActiveTab}
         role={user?.role}
@@ -441,6 +477,7 @@ export default function App() {
         onLogout={handleLogout}
         sidebarOpen={sidebarOpen}
         setSidebarOpen={setSidebarOpen}
+        unreadCounts={unreadCounts}
       />
 
       {/* 2. Center Panel: Active Chat Workspace or CRUD Account Config */}

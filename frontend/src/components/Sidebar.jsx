@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React from "react";
 
 export default function Sidebar({
   waitingChats,
@@ -14,8 +14,14 @@ export default function Sidebar({
   onLogout,
   sidebarOpen,
   setSidebarOpen,
+  unreadCounts = {},
 }) {
   const getBadgeCount = (list) => (list ? list.length : 0);
+
+  const totalUnreadCount = Object.values(unreadCounts).reduce(
+    (sum, count) => sum + (count || 0),
+    0
+  );
 
   const getInitials = (name) => {
     if (!name) return "V";
@@ -58,9 +64,19 @@ export default function Sidebar({
           </svg>
         </button>
 
-        {/* Avatar */}
-        <div className="h-9 w-9 rounded-full bg-gradient-to-tr from-accentTeal to-accentViolet flex items-center justify-center text-darkbg font-bold text-xs">
-          {getInitials(employeeName)}
+        {/* Collapsed Profile Avatar with Unread Badge */}
+        <div className="relative">
+          <div className="h-9 w-9 rounded-full bg-gradient-to-tr from-accentTeal to-accentViolet flex items-center justify-center text-darkbg font-bold text-xs shadow-md">
+            {getInitials(employeeName)}
+          </div>
+          {totalUnreadCount > 0 && (
+            <span
+              className="absolute -top-1.5 -right-1.5 bg-red-600 border-2 border-cardbg text-white text-[9px] font-extrabold h-4 min-w-4 px-1 rounded-full flex items-center justify-center animate-bounce shadow-lg shadow-red-900/50"
+              title={`${totalUnreadCount} total unread chats`}
+            >
+              {totalUnreadCount > 99 ? "99+" : totalUnreadCount}
+            </span>
+          )}
         </div>
 
         <div className="flex-1" />
@@ -135,14 +151,33 @@ export default function Sidebar({
   return (
     <div className="w-80 bg-cardbg border-r border-cardborder flex flex-col h-full transition-all duration-300">
 
-      {/* Profile Header */}
+      {/* Profile Header with Unread Counter */}
       <div className="p-4 border-b border-cardborder flex items-center justify-between">
         <div className="flex items-center space-x-3 min-w-0">
-          <div className="h-10 w-10 flex-shrink-0 rounded-full bg-gradient-to-tr from-accentTeal to-accentViolet flex items-center justify-center text-darkbg font-bold">
-            {getInitials(employeeName)}
+          <div className="relative flex-shrink-0">
+            <div className="h-10 w-10 rounded-full bg-gradient-to-tr from-accentTeal to-accentViolet flex items-center justify-center text-darkbg font-bold shadow-md">
+              {getInitials(employeeName)}
+            </div>
+            {totalUnreadCount > 0 && (
+              <span
+                className="absolute -top-1 -right-1 bg-red-600 border-2 border-cardbg text-white text-[10px] font-extrabold h-5 min-w-5 px-1 rounded-full flex items-center justify-center animate-bounce shadow-md shadow-red-900/50"
+                title={`${totalUnreadCount} unread messages`}
+              >
+                {totalUnreadCount > 99 ? "99+" : totalUnreadCount}
+              </span>
+            )}
           </div>
+
           <div className="min-w-0">
-            <h3 className="text-sm font-semibold text-white truncate">{employeeName}</h3>
+            <div className="flex items-center space-x-2">
+              <h3 className="text-sm font-semibold text-white truncate">{employeeName}</h3>
+              {totalUnreadCount > 0 && (
+                <span className="bg-red-600/90 text-white text-[9px] font-extrabold px-1.5 py-0.5 rounded-full flex items-center space-x-1 animate-pulse shadow-sm shadow-red-900/40">
+                  <span>●</span>
+                  <span>{totalUnreadCount} UNREAD</span>
+                </span>
+              )}
+            </div>
             <span className={`text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full ${
               role === "ADMIN"
                 ? "bg-purple-950/60 border border-purple-800/40 text-purple-300"
@@ -152,6 +187,7 @@ export default function Sidebar({
             </span>
           </div>
         </div>
+
         <div className="flex items-center space-x-1 flex-shrink-0">
           {/* Collapse button */}
           <button
@@ -250,68 +286,80 @@ export default function Sidebar({
             <span>No conversations here</span>
           </div>
         ) : (
-          chats.map((chat) => (
-            <button
-              key={chat.id}
-              onClick={() => onSelectChat(chat.id)}
-              className={`w-full text-left p-3 rounded-xl transition-all flex items-start space-x-3 border ${
-                selectedChatId === chat.id
-                  ? "bg-accentTeal/10 border-accentTeal/30 text-white"
-                  : "bg-transparent border-transparent hover:bg-cardborder/40 text-gray-300"
-              }`}
-            >
-              {/* Avatar + status dot */}
-              <div className="relative flex-shrink-0">
-                <div className={`h-10 w-10 rounded-xl flex items-center justify-center font-bold text-sm ${
-                  chat.status === "WAITING"
-                    ? "bg-yellow-950/60 border border-yellow-800/40 text-yellow-300"
-                    : chat.status === "ACTIVE"
-                    ? "bg-teal-950/60 border border-teal-800/40 text-teal-300"
-                    : "bg-cardborder border border-cardborder text-gray-400"
-                }`}>
-                  {getInitials(chat.visitor_display_name)}
+          chats.map((chat) => {
+            const unread = unreadCounts[chat.id] || 0;
+            return (
+              <button
+                key={chat.id}
+                onClick={() => onSelectChat(chat.id)}
+                className={`w-full text-left p-3 rounded-xl transition-all flex items-start space-x-3 border ${
+                  selectedChatId === chat.id
+                    ? "bg-accentTeal/10 border-accentTeal/30 text-white"
+                    : unread > 0
+                    ? "bg-red-950/20 border-red-900/40 text-white"
+                    : "bg-transparent border-transparent hover:bg-cardborder/40 text-gray-300"
+                }`}
+              >
+                {/* Avatar + status dot */}
+                <div className="relative flex-shrink-0">
+                  <div className={`h-10 w-10 rounded-xl flex items-center justify-center font-bold text-sm ${
+                    chat.status === "WAITING"
+                      ? "bg-yellow-950/60 border border-yellow-800/40 text-yellow-300"
+                      : chat.status === "ACTIVE"
+                      ? "bg-teal-950/60 border border-teal-800/40 text-teal-300"
+                      : "bg-cardborder border border-cardborder text-gray-400"
+                  }`}>
+                    {getInitials(chat.visitor_display_name)}
+                  </div>
+                  {chat.status === "ACTIVE" && (
+                    <span className="absolute bottom-0 right-0 h-3 w-3 rounded-full bg-green-500 border-2 border-cardbg" />
+                  )}
+                  {chat.status === "WAITING" && (
+                    <span className="absolute bottom-0 right-0 h-3 w-3 rounded-full bg-yellow-400 border-2 border-cardbg animate-pulse" />
+                  )}
                 </div>
-                {chat.status === "ACTIVE" && (
-                  <span className="absolute bottom-0 right-0 h-3 w-3 rounded-full bg-green-500 border-2 border-cardbg" />
-                )}
-                {chat.status === "WAITING" && (
-                  <span className="absolute bottom-0 right-0 h-3 w-3 rounded-full bg-yellow-400 border-2 border-cardbg animate-pulse" />
-                )}
-              </div>
 
-              {/* Chat details */}
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center justify-between">
-                  <h4 className="text-xs font-bold truncate text-white">
-                    {chat.visitor_display_name}
-                  </h4>
-                  <span className="text-[10px] text-gray-500 flex-shrink-0 ml-1">
-                    {formatTime(chat.created_at)}
-                  </span>
+                {/* Chat details */}
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-xs font-bold truncate text-white">
+                      {chat.visitor_display_name}
+                    </h4>
+                    <div className="flex items-center space-x-1.5 flex-shrink-0 ml-1">
+                      {unread > 0 && (
+                        <span className="bg-red-600 text-white text-[9px] font-extrabold px-1.5 py-0.5 rounded-full animate-pulse shadow-sm shadow-red-900/40">
+                          {unread} new
+                        </span>
+                      )}
+                      <span className="text-[10px] text-gray-500">
+                        {formatTime(chat.created_at)}
+                      </span>
+                    </div>
+                  </div>
+                  <p className="text-[11px] text-gray-400 truncate mt-0.5">
+                    {chat.visitor_email || "No email provided"}
+                  </p>
+
+                  {/* Assignment info — show on All tab or Active tab */}
+                  {chat.status === "ACTIVE" && chat.assigned_employee_name && (
+                    <p className="text-[9px] text-accentViolet font-semibold mt-1 truncate">
+                      Agent: {chat.assigned_employee_name}
+                    </p>
+                  )}
+                  {chat.status === "WAITING" && (
+                    <p className="text-[9px] text-yellow-500 font-semibold mt-1">
+                      Awaiting agent
+                    </p>
+                  )}
+                  {chat.status === "CLOSED" && chat.assigned_employee_name && (
+                    <p className="text-[9px] text-gray-500 mt-1 truncate">
+                      Handled by: {chat.assigned_employee_name}
+                    </p>
+                  )}
                 </div>
-                <p className="text-[11px] text-gray-400 truncate mt-0.5">
-                  {chat.visitor_email || "No email provided"}
-                </p>
-
-                {/* Assignment info — show on All tab or Active tab */}
-                {chat.status === "ACTIVE" && chat.assigned_employee_name && (
-                  <p className="text-[9px] text-accentViolet font-semibold mt-1 truncate">
-                    Agent: {chat.assigned_employee_name}
-                  </p>
-                )}
-                {chat.status === "WAITING" && (
-                  <p className="text-[9px] text-yellow-500 font-semibold mt-1">
-                    Awaiting agent
-                  </p>
-                )}
-                {chat.status === "CLOSED" && chat.assigned_employee_name && (
-                  <p className="text-[9px] text-gray-500 mt-1 truncate">
-                    Handled by: {chat.assigned_employee_name}
-                  </p>
-                )}
-              </div>
-            </button>
-          ))
+              </button>
+            );
+          })
         )}
       </div>
     </div>
