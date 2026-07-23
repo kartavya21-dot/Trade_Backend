@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { API_BASE_URL } from "../config";
 
 export default function EmployeeManager({ token }) {
   const [employees, setEmployees] = useState([]);
@@ -20,7 +21,7 @@ export default function EmployeeManager({ token }) {
     setLoading(true);
     setError("");
     try {
-      const res = await fetch("/employees", {
+      const res = await fetch(`${API_BASE_URL}/employees`, {
         headers: {
           Authorization: `Bearer ${token}`
         }
@@ -62,7 +63,7 @@ export default function EmployeeManager({ token }) {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
-    const url = editingEmployee ? `/employees/${editingEmployee.id}` : "/employees";
+    const url = editingEmployee ? `${API_BASE_URL}/employees/${editingEmployee.id}` : `${API_BASE_URL}/employees`;
     const method = editingEmployee ? "PUT" : "POST";
     
     const payload = {
@@ -105,7 +106,7 @@ export default function EmployeeManager({ token }) {
     if (!window.confirm("Are you sure you want to delete this employee?")) return;
     setError("");
     try {
-      const res = await fetch(`/employees/${id}`, {
+      const res = await fetch(`${API_BASE_URL}/employees/${id}`, {
         method: "DELETE",
         headers: {
           Authorization: `Bearer ${token}`

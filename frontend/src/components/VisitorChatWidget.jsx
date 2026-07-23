@@ -1,7 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-
-const API_BASE_URL = "http://localhost:8006";
-const WS_BASE_URL = "ws://localhost:8006";
+import { API_BASE_URL, getWsUrl } from "../config";
 
 export default function VisitorChatWidget() {
   const [isOpen, setIsOpen] = useState(false);
@@ -124,7 +122,7 @@ export default function VisitorChatWidget() {
   useEffect(() => {
     if (!conversationId || !hasSubmittedForm) return;
 
-    const ws = new WebSocket(`${WS_BASE_URL}/ws/visitor/${conversationId}`);
+    const ws = new WebSocket(getWsUrl(`/ws/visitor/${conversationId}`));
     wsRef.current = ws;
 
     ws.onopen = () => {

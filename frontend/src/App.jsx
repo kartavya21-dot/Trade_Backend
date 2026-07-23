@@ -4,8 +4,13 @@ import Sidebar from "./components/Sidebar";
 import ChatArea from "./components/ChatArea";
 import VisitorDetails from "./components/VisitorDetails";
 import EmployeeManager from "./components/EmployeeManager";
+import VisitorWebsite from "./components/VisitorWebsite";
+import { API_BASE_URL, getWsUrl } from "./config";
 
 export default function App() {
+  const path = window.location.pathname;
+  const isAdminRoute = path.startsWith("/admin") || path.startsWith("/admin_login");
+
   const [token, setToken] = useState(localStorage.getItem("token") || "");
   const [user, setUser] = useState(
     JSON.parse(localStorage.getItem("user") || "null"),
@@ -19,7 +24,7 @@ export default function App() {
   // Selection states
   const [selectedChatId, setSelectedChatId] = useState(null);
   const [messages, setMessages] = useState([]);
-  const [activeTab, setActiveTab] = useState("waiting"); // waiting, active, closed, all, employees
+  const [activeTab, setActiveTab] = useState("waiting"); // waiting, active, all, employees
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [unreadCounts, setUnreadCounts] = useState({}); // { [chatId]: number }
 
@@ -104,29 +109,20 @@ export default function App() {
       const headers = { Authorization: `Bearer ${token}` };
 
       // 1. Fetch waiting
-      const resWaiting = await fetch("/conversations/waiting", { headers });
+      const resWaiting = await fetch(`${API_BASE_URL}/conversations/waiting`, { headers });
       if (resWaiting.ok) setWaitingChats(await resWaiting.json());
 
       // 2. Fetch assigned active
-      const resAssigned = await fetch("/conversations/assigned", { headers });
+      const resAssigned = await fetch(`${API_BASE_URL}/conversations/assigned`, { headers });
       if (resAssigned.ok) setActiveChats(await resAssigned.json());
 
-      // 3. Fetch all if admin, otherwise we only show active/waiting/closed
+      // 3. Fetch all if admin
       if (user?.role === "ADMIN") {
-        const resAll = await fetch("/conversations/all", { headers });
+        const resAll = await fetch(`${API_BASE_URL}/conversations/all`, { headers });
         if (resAll.ok) {
           const allData = await resAll.json();
           setAllChats(allData);
-          setClosedChats(allData.filter((c) => c.status === "CLOSED"));
         }
-      } else {
-        // For standard employees, closed conversations can be filtered from local state or fetch last active
-        // Let's fallback to filtering closed from any loaded lists, or in a real production env, fetch them.
-        // We will mock fetching closed list or query the database.
-        // Actually, since there is no custom GET /conversations/closed endpoint in backend, and GET /conversations/all is Admin only,
-        // we can fetch all conversations assigned to employee and filter, or fetch all from backend if supported.
-        // Let's look at the endpoints: GET /conversations/assigned returns active chats assigned to the employee.
-        // To show closed chats for employees, we can filter them out from local state, or query historical list.
       }
     } catch (e) {
       console.error("Failed to fetch queues:", e);
@@ -137,7 +133,7 @@ export default function App() {
   const fetchMessages = async (chatId) => {
     if (!token || !chatId) return;
     try {
-      const res = await fetch(`/conversations/${chatId}/messages`, {
+      const res = await fetch(`${API_BASE_URL}/conversations/${chatId}/messages`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (res.ok) {
@@ -167,11 +163,7 @@ export default function App() {
     fetchQueues();
 
     // Setup Websocket
-    const wsProtocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const host = window.location.host;
-    const wsUrl = `${wsProtocol}//${host}/ws/agent?token=${token}`;
-
-    const ws = new WebSocket(wsUrl);
+    const ws = new WebSocket(getWsUrl(`/ws/agent?token=${token}`));
     wsRef.current = ws;
 
     ws.onopen = () => {
@@ -318,15 +310,11 @@ export default function App() {
 
   const handleAcceptChat = async (chatId) => {
     try {
-      const res = await fetch(`/conversations/${chatId}/accept`, {
+      const res = await fetch(`${API_BASE_URL}/conversations/${chatId}/accept`, {
         method: "POST",
         headers: { Authorization: `Bearer ${token}` },
       });
       if (res.ok) {
-        // Optimistically remove from the waiting queue immediately for snappy UX.
-        // The WebSocket "conversation_updated" event will handle adding it to activeChats
-        // with its built-in duplicate guard — doing it here too causes a double-render
-        // due to React state closure timing between the fetch and the WS callback.
         setWaitingChats((prev) => prev.filter((c) => c.id !== chatId));
         setSelectedChatId(chatId);
         setActiveTab("active");
@@ -336,7 +324,6 @@ export default function App() {
     }
   };
 
-
   const handleDeleteConversation = async (chatId) => {
     if (
       !window.confirm(
@@ -345,7 +332,7 @@ export default function App() {
     )
       return;
     try {
-      const res = await fetch(`/conversations/${chatId}`, {
+      const res = await fetch(`${API_BASE_URL}/conversations/${chatId}`, {
         method: "DELETE",
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -353,7 +340,6 @@ export default function App() {
         // Remove from all local queues
         setWaitingChats((prev) => prev.filter((c) => c.id !== chatId));
         setActiveChats((prev) => prev.filter((c) => c.id !== chatId));
-        setClosedChats((prev) => prev.filter((c) => c.id !== chatId));
         setAllChats((prev) => prev.filter((c) => c.id !== chatId));
         // Deselect if currently viewing
         if (selectedChatId === chatId) {
@@ -371,7 +357,7 @@ export default function App() {
 
   const handleUpdateVisitor = async (payload) => {
     try {
-      const res = await fetch("/visitor/update", {
+      const res = await fetch(`${API_BASE_URL}/visitor/update`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -410,6 +396,12 @@ export default function App() {
       console.error(e);
     }
   };
+
+  // ── Routing Logic ──
+  // If not visiting an admin route (/admin, /admin_login), show the Visitor Website with Chat Widget!
+  if (!isAdminRoute) {
+    return <VisitorWebsite />;
+  }
 
   if (!token) {
     return <Login onLoginSuccess={handleLoginSuccess} />;
