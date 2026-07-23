@@ -3,7 +3,6 @@ import React from "react";
 export default function Sidebar({
   waitingChats,
   activeChats,
-  closedChats,
   allChats,
   selectedChatId,
   onSelectChat,
@@ -41,7 +40,6 @@ export default function Sidebar({
     switch (activeTab) {
       case "waiting":  return waitingChats  || [];
       case "active":   return activeChats   || [];
-      case "closed":   return closedChats   || [];
       case "all":      return allChats      || [];
       default:         return [];
     }

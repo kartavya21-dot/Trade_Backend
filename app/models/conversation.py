@@ -12,6 +12,7 @@ if TYPE_CHECKING:
 class ConversationStatus(str, enum.Enum):
     WAITING = "WAITING"
     ACTIVE = "ACTIVE"
+    CLOSED = "CLOSED"
 
 class Conversation(SQLModel, table=True):
     __tablename__ = "conversation"

@@ -174,9 +174,7 @@ export default function ChatArea({
             rows="1"
             className="flex-1 bg-transparent text-white focus:outline-none placeholder-gray-500 text-xs px-3 py-2 resize-none max-h-24 disabled:opacity-40"
             placeholder={
-              isClosed
-                ? "This conversation is closed."
-                : isWaiting
+              isWaiting
                 ? "Accept the chat to start writing messages."
                 : !isAssignedToMe
                 ? "Only the assigned agent can reply."

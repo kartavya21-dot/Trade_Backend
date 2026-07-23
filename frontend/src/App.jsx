@@ -423,7 +423,6 @@ export default function App() {
       <Sidebar
         waitingChats={waitingChats}
         activeChats={activeChats}
-        closedChats={closedChats}
         allChats={allChats}
         selectedChatId={selectedChatId}
         onSelectChat={(chatId) => {
