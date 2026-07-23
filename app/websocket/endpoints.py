@@ -24,6 +24,21 @@ async def websocket_visitor(
     print(f"[WS VISITOR] Connecting conversation: {conversation_id}")
     await manager.connect_visitor(conversation_id, websocket)
     print(f"[WS VISITOR] Connected. Active visitor connections for {conversation_id}: {len(manager.visitor_connections.get(conversation_id, []))}")
+
+    # Send initial status sync to visitor socket
+    async with async_session_maker() as db:
+        conversation = await ConversationService.get_by_id(db, conversation_id)
+        if conversation:
+            if conversation.status == "ACTIVE" and conversation.assigned_employee:
+                await websocket.send_json({
+                    "type": "agent_assigned",
+                    "assigned_employee_id": str(conversation.assigned_employee_id),
+                    "assigned_employee_name": conversation.assigned_employee.name
+                })
+            elif conversation.status == "CLOSED":
+                await websocket.send_json({
+                    "type": "conversation_closed"
+                })
     
     try:
         while True:

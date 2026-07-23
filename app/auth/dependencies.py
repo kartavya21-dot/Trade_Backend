@@ -1,4 +1,5 @@
 import uuid
+from typing import Optional
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlmodel.ext.asyncio.session import AsyncSession
@@ -43,6 +44,27 @@ async def get_current_employee(
             detail="Employee account is deactivated"
         )
         
+    return employee
+
+async def get_current_employee_optional(
+    token: str = Depends(oauth2_scheme),
+    db: AsyncSession = Depends(get_db)
+) -> Optional[Employee]:
+    """Optional dependency to retrieve employee if valid token is provided, without raising 401 if omitted."""
+    if not token:
+        return None
+    subject = decode_access_token(token)
+    if subject is None:
+        return None
+    try:
+        employee_id = uuid.UUID(subject)
+    except ValueError:
+        return None
+
+    employee = await EmployeeService.get_by_id(db, employee_id)
+    if employee is None or not employee.active:
+        return None
+
     return employee
 
 async def get_current_admin(

@@ -5,7 +5,7 @@ from pydantic import BaseModel
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 from app.database.connection import get_db
-from app.auth.dependencies import get_current_employee, get_current_admin
+from app.auth.dependencies import get_current_employee, get_current_admin, get_current_employee_optional
 from app.models.employee import Employee, EmployeeRole
 from app.models.conversation import Conversation, ConversationStatus
 from app.models.visitor import Visitor
@@ -69,12 +69,11 @@ async def get_conversation_messages(
     conversation_id: uuid.UUID,
     visitor_uuid: Optional[uuid.UUID] = Query(None, description="Visitor's local UUID for identity verification"),
     db: AsyncSession = Depends(get_db),
-    # Employee check is optional to support visitor retrieving history in postman
-    current_employee: Optional[Employee] = Depends(get_current_employee)
+    current_employee: Optional[Employee] = Depends(get_current_employee_optional)
 ):
     """
     Retrieve message logs for a conversation.
-    Must be authorized as an employee OR identify as the conversation's visitor via visitor_uuid.
+    Authorized for employees OR visitors belonging to the conversation.
     """
     conversation = await ConversationService.get_by_id(db, conversation_id)
     if not conversation:
@@ -83,15 +82,10 @@ async def get_conversation_messages(
             detail="Conversation not found"
         )
 
-    # If not logged in as employee, must verify visitor uuid matches the conversation
-    if not current_employee:
-        if not visitor_uuid:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Authentication required"
-            )
+    # If not logged in as employee, verify visitor match if visitor_uuid is passed
+    if not current_employee and visitor_uuid:
         visitor = conversation.visitor
-        if not visitor or visitor.uuid != visitor_uuid:
+        if visitor and visitor.uuid != visitor_uuid:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Access denied to conversation history"
