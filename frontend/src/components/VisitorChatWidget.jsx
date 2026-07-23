@@ -39,6 +39,27 @@ export default function VisitorChatWidget() {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isOpen, hasSubmittedForm]);
 
+  const resetVisitorSession = () => {
+    localStorage.removeItem("visitor_conversation_id");
+    localStorage.removeItem("visitor_uuid");
+    localStorage.removeItem("visitor_name");
+    localStorage.removeItem("visitor_email");
+    localStorage.removeItem("visitor_phone");
+    setConversationId(null);
+    setVisitorUuid(null);
+    setVisitorName("");
+    setVisitorEmail("");
+    setVisitorPhone("");
+    setHasSubmittedForm(false);
+    setMessages([]);
+    setAgentName(null);
+    setChatStatus("DISCONNECTED");
+    if (wsRef.current) {
+      wsRef.current.close();
+      wsRef.current = null;
+    }
+  };
+
   // 1. Fetch message history for existing conversation
   const fetchHistory = async (convId, vUuid) => {
     try {
@@ -47,6 +68,9 @@ export default function VisitorChatWidget() {
       if (res.ok) {
         const history = await res.json();
         setMessages(history);
+      } else if (res.status === 404 || res.status === 401 || res.status === 403) {
+        // Conversation was deleted or visitor UUID is invalid — reset session to Pre-Chat Form
+        resetVisitorSession();
       }
     } catch (err) {
       console.error("Failed to fetch message history:", err);
@@ -118,13 +142,14 @@ export default function VisitorChatWidget() {
       } else if (data.type === "agent_assigned") {
         setAgentName(data.assigned_employee_name);
         setChatStatus("ACTIVE");
-      } else if (data.type === "conversation_closed") {
-        setChatStatus("CLOSED");
+      } else if (data.type === "conversation_deleted") {
+        // Agent or Admin deleted the chat — reset session to Pre-Chat Form so visitor can start a new chat
+        resetVisitorSession();
       }
     };
 
     ws.onclose = () => {
-      setChatStatus((prev) => (prev === "CLOSED" ? "CLOSED" : "DISCONNECTED"));
+      setChatStatus("DISCONNECTED");
     };
 
     return () => {

@@ -85,7 +85,6 @@ export default function Sidebar({
         {[
           { tab: "waiting", icon: "M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z", badge: getBadgeCount(waitingChats), title: "Waiting" },
           { tab: "active",  icon: "M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z", badge: getBadgeCount(activeChats), title: "My Active Chats" },
-          { tab: "closed",  icon: "M5 13l4 4L19 7", title: "Closed" },
         ].map(({ tab, icon, badge, title }) => (
           <button
             key={tab}
@@ -212,11 +211,10 @@ export default function Sidebar({
       </div>
 
       {/* Queue Tabs */}
-      <div className={`grid border-b border-cardborder bg-darkbg/25 text-xs font-semibold ${role === "ADMIN" ? "grid-cols-4" : "grid-cols-3"}`}>
+      <div className={`grid border-b border-cardborder bg-darkbg/25 text-xs font-semibold ${role === "ADMIN" ? "grid-cols-3" : "grid-cols-2"}`}>
         {[
           { tab: "waiting", label: "Waiting",   badge: getBadgeCount(waitingChats), color: "accentTeal" },
           { tab: "active",  label: "My Chats",  badge: getBadgeCount(activeChats),  color: "accentViolet" },
-          { tab: "closed",  label: "Closed",    badge: 0,                            color: "accentTeal" },
         ].map(({ tab, label, badge, color }) => (
           <button
             key={tab}

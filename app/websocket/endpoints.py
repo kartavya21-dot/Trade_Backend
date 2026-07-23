@@ -35,10 +35,6 @@ async def websocket_visitor(
                     "assigned_employee_id": str(conversation.assigned_employee_id),
                     "assigned_employee_name": conversation.assigned_employee.name
                 })
-            elif conversation.status == "CLOSED":
-                await websocket.send_json({
-                    "type": "conversation_closed"
-                })
     
     try:
         while True:
@@ -52,16 +48,6 @@ async def websocket_visitor(
                 if not conversation:
                     print(f"[WS VISITOR] Conversation {conversation_id} not found in DB. Closing socket.")
                     break
-                
-                # Check status. Visitor can message if status is WAITING or ACTIVE.
-                # If CLOSED, ignore or notify.
-                if conversation.status == "CLOSED":
-                    print(f"[WS VISITOR] Conversation {conversation_id} is CLOSED. Ignoring message.")
-                    await websocket.send_json({
-                        "type": "error",
-                        "message": "This conversation is closed."
-                    })
-                    continue
 
                 # Parse message payload
                 try:
@@ -174,13 +160,6 @@ async def websocket_agent(
                     await websocket.send_json({
                         "type": "error",
                         "message": "Conversation not found."
-                    })
-                    continue
-
-                if conversation.status == "CLOSED":
-                    await websocket.send_json({
-                        "type": "error",
-                        "message": "This conversation is already closed."
                     })
                     continue
 

@@ -14,7 +14,6 @@ export default function App() {
   // Chat queues
   const [waitingChats, setWaitingChats] = useState([]);
   const [activeChats, setActiveChats] = useState([]);
-  const [closedChats, setClosedChats] = useState([]);
   const [allChats, setAllChats] = useState([]); // Admin only
 
   // Selection states
@@ -73,7 +72,6 @@ export default function App() {
     return (
       activeChats.find((c) => c.id === selectedChatId) ||
       waitingChats.find((c) => c.id === selectedChatId) ||
-      closedChats.find((c) => c.id === selectedChatId) ||
       allChats.find((c) => c.id === selectedChatId)
     );
   };
@@ -225,22 +223,10 @@ export default function App() {
             }
             return prev.map((c) => (c.id === updatedConv.id ? updatedConv : c));
           }
-          // Remove if closed or assigned to someone else
           return prev.filter((c) => c.id !== updatedConv.id);
         });
 
-        // 3. Update closed chats
-        setClosedChats((prev) => {
-          if (updatedConv.status === "CLOSED") {
-            if (!prev.some((c) => c.id === updatedConv.id)) {
-              return [updatedConv, ...prev];
-            }
-            return prev.map((c) => (c.id === updatedConv.id ? updatedConv : c));
-          }
-          return prev.filter((c) => c.id !== updatedConv.id);
-        });
-
-        // 4. Update Admin all chats list
+        // 3. Update Admin all chats list
         setAllChats((prev) => {
           if (!prev.some((c) => c.id === updatedConv.id)) {
             return [updatedConv, ...prev];
@@ -289,14 +275,12 @@ export default function App() {
 
         setWaitingChats((prev) => prev.map(updater));
         setActiveChats((prev) => prev.map(updater));
-        setClosedChats((prev) => prev.map(updater));
         setAllChats((prev) => prev.map(updater));
       } else if (data.type === "conversation_deleted") {
         const deletedId = data.conversation_id;
         // Remove from all queues immediately
         setWaitingChats((prev) => prev.filter((c) => c.id !== deletedId));
         setActiveChats((prev) => prev.filter((c) => c.id !== deletedId));
-        setClosedChats((prev) => prev.filter((c) => c.id !== deletedId));
         setAllChats((prev) => prev.filter((c) => c.id !== deletedId));
         setUnreadCounts((prev) => {
           if (!prev[deletedId]) return prev;
@@ -352,23 +336,6 @@ export default function App() {
     }
   };
 
-  const handleCloseChat = async (chatId) => {
-    try {
-      const res = await fetch(`/conversations/${chatId}/close`, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (res.ok) {
-        const updatedChat = await res.json();
-
-        // Remove from active, add to closed
-        setActiveChats((prev) => prev.filter((c) => c.id !== chatId));
-        setClosedChats((prev) => [updatedChat, ...prev]);
-      }
-    } catch (e) {
-      console.error(e);
-    }
-  };
 
   const handleDeleteConversation = async (chatId) => {
     if (
@@ -489,7 +456,6 @@ export default function App() {
           messages={messages}
           onSendMessage={handleSendMessage}
           onAcceptChat={handleAcceptChat}
-          onCloseChat={handleCloseChat}
           onDeleteConversation={handleDeleteConversation}
           employeeId={user?.employee_id}
           role={user?.role}

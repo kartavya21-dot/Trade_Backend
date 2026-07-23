@@ -145,27 +145,6 @@ class ConversationService:
         return await ConversationService.get_by_id(db, conversation_id)
 
     @staticmethod
-    async def close_conversation(db: AsyncSession, conversation_id: uuid.UUID) -> Conversation:
-        """Close an active conversation"""
-        conversation = await ConversationService.get_by_id(db, conversation_id)
-        if not conversation:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Conversation not found"
-            )
-
-        if conversation.status == ConversationStatus.CLOSED:
-            return conversation
-
-        conversation.status = ConversationStatus.CLOSED
-        conversation.closed_at = datetime.utcnow()
-        db.add(conversation)
-        await db.commit()
-        
-        # Return fully loaded
-        return await ConversationService.get_by_id(db, conversation_id)
-
-    @staticmethod
     async def get_waiting(db: AsyncSession) -> List[Conversation]:
         """Fetch all conversations in WAITING status"""
         stmt = (

@@ -67,11 +67,9 @@ export default function ChatArea({
   // Permission checks
   const isWaiting = activeChat.status === "WAITING";
   const isActive  = activeChat.status === "ACTIVE";
-  const isClosed  = activeChat.status === "CLOSED";
   const isAssignedToMe = activeChat.assigned_employee_id === employeeId;
   const isAdmin   = role === "ADMIN";
   const canSend   = isActive && isAssignedToMe;
-  const canClose  = isActive && (isAssignedToMe || isAdmin);
   // Employee can delete only their own conversations; admin can delete any
   const canDelete = isAdmin || isAssignedToMe;
 
@@ -109,15 +107,6 @@ export default function ChatArea({
               className="bg-gradient-to-r from-accentTeal to-accentViolet text-darkbg hover:opacity-90 font-semibold px-4 py-2 rounded-xl text-xs shadow-lg transition-opacity"
             >
               Accept Chat
-            </button>
-          )}
-
-          {canClose && (
-            <button
-              onClick={() => onCloseChat(activeChat.id)}
-              className="bg-red-950/60 border border-red-800/40 text-red-300 hover:bg-red-900/40 font-semibold px-4 py-2 rounded-xl text-xs transition-colors"
-            >
-              Close Chat
             </button>
           )}
 
