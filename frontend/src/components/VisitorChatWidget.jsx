@@ -169,7 +169,7 @@ export default function VisitorChatWidget() {
   // 4. Send Message over WebSocket
   const handleSendMessage = (e) => {
     e.preventDefault();
-    if (!inputText.trim() || chatStatus === "CLOSED") return;
+    if (!inputText.trim()) return;
 
     if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
       handleStartChatSession();
