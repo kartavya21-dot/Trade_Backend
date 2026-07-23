@@ -18,10 +18,46 @@ export default function App() {
   // Selection states
   const [selectedChatId, setSelectedChatId] = useState(null);
   const [messages, setMessages] = useState([]);
-  const [activeTab, setActiveTab] = useState("waiting"); // waiting, active, closed, employees
+  const [activeTab, setActiveTab] = useState("waiting"); // waiting, active, closed, all, employees
+  const [sidebarOpen, setSidebarOpen] = useState(true);
 
   const wsRef = useRef(null);
   const selectedChatIdRef = useRef(null);
+
+  // ── Notification sound using Web Audio API (no external file needed) ──────
+  const playNotification = (type = "message") => {
+    try {
+      const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      const o = ctx.createOscillator();
+      const g = ctx.createGain();
+      o.connect(g);
+      g.connect(ctx.destination);
+
+      if (type === "new_chat") {
+        // Two-tone ascending chime for new visitor
+        o.type = "sine";
+        o.frequency.setValueAtTime(520, ctx.currentTime);
+        o.frequency.setValueAtTime(780, ctx.currentTime + 0.12);
+        g.gain.setValueAtTime(0.35, ctx.currentTime);
+        g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.45);
+        o.start(ctx.currentTime);
+        o.stop(ctx.currentTime + 0.45);
+      } else {
+        // Gentle two-stage descending chime for incoming message
+        o.type = "sine";
+        o.frequency.setValueAtTime(740, ctx.currentTime);
+        o.frequency.setValueAtTime(620, ctx.currentTime + 0.15);
+        o.frequency.setValueAtTime(520, ctx.currentTime + 0.35);
+        g.gain.setValueAtTime(0.25, ctx.currentTime);
+        g.gain.setValueAtTime(0.22, ctx.currentTime + 0.15);
+        g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.75);
+        o.start(ctx.currentTime);
+        o.stop(ctx.currentTime + 0.75);
+      }
+    } catch (e) {
+      // Web Audio not available — silent fail
+    }
+  };
 
   // Sync ref with selectedChatId state to prevent stale closures in WebSocket callbacks
   useEffect(() => {
@@ -145,6 +181,12 @@ export default function App() {
           if (prev.some((c) => c.id === data.conversation.id)) return prev;
           return [...prev, data.conversation];
         });
+        // Also add to allChats for admin
+        setAllChats((prev) => {
+          if (prev.some((c) => c.id === data.conversation.id)) return prev;
+          return [data.conversation, ...prev];
+        });
+        playNotification("new_chat");
       } else if (data.type === "conversation_updated") {
         const updatedConv = data.conversation;
         
@@ -199,6 +241,10 @@ export default function App() {
             if (prev.some((m) => m.id === msg.id)) return prev;
             return [...prev, msg];
           });
+        }
+        // Play sound for incoming messages from visitors (not echoes of own sends)
+        if (msg.sender_type === "VISITOR") {
+          playNotification("message");
         }
       } else if (data.type === "visitor_updated") {
         // Visitor profile renamed or email changed, update local cache
@@ -371,6 +417,7 @@ export default function App() {
         waitingChats={waitingChats}
         activeChats={activeChats}
         closedChats={closedChats}
+        allChats={allChats}
         selectedChatId={selectedChatId}
         onSelectChat={setSelectedChatId}
         activeTab={activeTab}
@@ -378,6 +425,8 @@ export default function App() {
         role={user?.role}
         employeeName={user?.employee_name}
         onLogout={handleLogout}
+        sidebarOpen={sidebarOpen}
+        setSidebarOpen={setSidebarOpen}
       />
 
       {/* 2. Center Panel: Active Chat Workspace or CRUD Account Config */}
