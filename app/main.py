@@ -55,7 +55,7 @@ app = FastAPI(
 # Enable CORS for developer workflows
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["https://superstock.pro", "https://trade-web-app.vercel.app"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
