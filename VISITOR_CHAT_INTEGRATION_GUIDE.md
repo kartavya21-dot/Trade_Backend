@@ -1,54 +1,55 @@
 # Visitor Live Chat Integration Guide
 
-This guide outlines how to build and integrate the **Visitor Chat Widget** into your main customer-facing website. It covers the required REST endpoints, WebSocket event specifications, session persistence rules, pre-chat registration form workflow, and a complete code example.
+This guide outlines how to integrate the **Visitor Chat Widget** into your customer-facing website. It explains the zero-friction anonymous session workflow, backend REST endpoints, WebSocket events, and provides a complete drop-in React component.
 
 ---
 
 ## 1. Core Architecture & Workflow
 
-1. **Pre-Chat Form First**: When a visitor opens the chat widget for the first time, a **Pre-Chat Form** requests their **Full Name** and **Email Address** before initiating the chat session.
-2. **Session Persistence**: Once submitted, the server returns a `visitor_uuid` and `conversation_id` which are saved in `localStorage`. Reusing these identifiers maintains their conversation history across page navigations and browser refreshes without requiring them to fill out the form again.
-3. **Dual-Channel Setup**:
-   - **HTTP REST API**: Used for starting sessions (`POST /chat/start`), fetching message history (`GET /conversations/{id}/messages?visitor_uuid={uuid}`), and updating visitor details (`POST /visitor/update`).
-   - **WebSocket API**: Used for real-time bidirectional messaging (`ws://<host>/ws/visitor/{conversation_id}`) and receiving status notifications (e.g. agent assigned, conversation closed).
+### 🚀 Zero Personal Info Required (Instant Anonymous Chat)
+1. **Immediate Chat Access**: Visitors do **not** need to fill out any forms or provide personal information (no name, email, or phone required) to begin chatting.
+2. **Unique Anonymous ID**: When a visitor starts a chat, the backend automatically generates a unique `visitor_uuid` and assigns them an anonymous display name based on their unique ID (e.g. `Visitor #7C9E66`).
+3. **Session Persistence**: The returned `visitor_uuid` and `conversation_id` are saved in the visitor's browser `localStorage`. When the visitor navigates across pages or returns later, passing their stored `visitor_uuid` instantly restores their conversation and message history.
+4. **Agent Updates Info Mid-Chat**: If the customer shares their personal details (name, email, phone) during the conversation, the support team can update the customer's record directly from the support dashboard (`POST /visitor/update`). The backend broadcasts this update in real-time, instantly reflecting the customer's real name across both the agent dashboard and visitor widget.
+5. **Session Deletion & Reset**: If a support agent or admin permanently deletes a conversation, the visitor's widget receives a `conversation_deleted` WebSocket event, automatically cleans up `localStorage`, and is immediately ready to start a fresh anonymous session whenever the visitor sends their next message.
 
 ---
 
 ## 2. API Reference
 
-> **Base Server URL**: `http://localhost:8006` (or your backend domain)  
-> **WebSocket URL**: `ws://localhost:8006/ws/visitor/{conversation_id}`
+> **Base Server URL**: `http://localhost:8000` (or your deployed backend URL, e.g. `https://your-backend.up.railway.app`)  
+> **WebSocket URL**: `ws://localhost:8000/ws/visitor/{conversation_id}` (or `wss://your-backend.up.railway.app/ws/visitor/{conversation_id}`)
 
 ### 2.1 REST Endpoints
 
-#### A. Start / Resume Chat Session (Pre-Chat Submission)
+#### A. Start / Resume Anonymous Chat Session
 - **Endpoint**: `POST /chat/start`
+- **Request Headers**: `Content-Type: application/json`
 - **Request Body**:
 ```json
 {
-  "uuid": "7c9e6679-7425-40de-944b-e07fc1f90ae7", // Optional: Pass existing visitor_uuid from localStorage if available
-  "name": "Jane Doe",                           // Required for first-time visitors
-  "email": "jane@example.com",                   // Required for first-time visitors
-  "phone": "+123456789"                          // Optional
+  "uuid": "7c9e6679-7425-40de-944b-e07fc1f90ae7" // Optional: Pass existing visitor_uuid from localStorage if available, or null for new visitors
 }
 ```
+*(No name, email, or phone is required.)*
+
 - **Response (200 OK)**:
 ```json
 {
   "conversation_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
   "visitor_uuid": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
   "visitor_id": "123e4567-e89b-12d3-a456-426614174000",
-  "display_name": "Jane Doe"
+  "display_name": "Visitor #7C9E66"
 }
 ```
 
-> 💡 **Save `visitor_uuid` and `conversation_id` in `localStorage` upon receiving this response.**
+> 💡 **Store both `visitor_uuid` and `conversation_id` in `localStorage` upon receiving this response.**
 
 ---
 
 #### B. Fetch Message History
 - **Endpoint**: `GET /conversations/{conversation_id}/messages?visitor_uuid={visitor_uuid}`
-- **Query Parameter**: `visitor_uuid` (Recommended for visitors to verify conversation ownership)
+- **Query Parameter**: `visitor_uuid` (Passed by visitor to verify conversation ownership)
 - **Response (200 OK)**:
 ```json
 [
@@ -57,9 +58,9 @@ This guide outlines how to build and integrate the **Visitor Chat Widget** into 
     "conversation_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
     "sender_type": "VISITOR",
     "sender_id": "123e4567-e89b-12d3-a456-426614174000",
-    "sender_name": "Jane Doe",
-    "message": "Hello, I have a query regarding my order.",
-    "created_at": "2026-07-23T13:10:52.000Z"
+    "sender_name": "Visitor #7C9E66",
+    "message": "Hi, I have a question about pricing.",
+    "created_at": "2026-10-26T14:10:52.000Z"
   },
   {
     "id": "0882799e-1438-40b7-8099-494cae2475ef",
@@ -67,16 +68,17 @@ This guide outlines how to build and integrate the **Visitor Chat Widget** into 
     "sender_type": "EMPLOYEE",
     "sender_id": "f5a5b991-1949-4320-be24-e861914bdef0",
     "sender_name": "Support Agent Alex",
-    "message": "Hi Jane! I'd be happy to help you with that.",
-    "created_at": "2026-07-23T13:11:05.000Z"
+    "message": "Hello! I'd be glad to help with that.",
+    "created_at": "2026-10-26T14:11:05.000Z"
   }
 ]
 ```
 
 ---
 
-#### C. Update Visitor Details
+#### C. Update Visitor Details (Used by Support Agent)
 - **Endpoint**: `POST /visitor/update`
+- **Request Headers**: `Content-Type: application/json`, `Authorization: Bearer <agent_token>`
 - **Request Body**:
 ```json
 {
@@ -86,25 +88,27 @@ This guide outlines how to build and integrate the **Visitor Chat Widget** into 
   "phone": "+1987654321"
 }
 ```
+*When executed by an agent, the server automatically broadcasts a `visitor_updated` event to the visitor's socket and updates their display name across all dashboards.*
 
 ---
 
 ### 2.2 WebSocket Endpoint
 
-- **Endpoint**: `ws://localhost:8006/ws/visitor/{conversation_id}`
+- **Endpoint**: `ws://<backend_host>/ws/visitor/{conversation_id}`  
+  *(Use `wss://` in production with HTTPS)*
 
 #### A. Outgoing Visitor Message
 Send raw JSON over the WebSocket connection:
 ```json
 {
-  "message": "Hello, are you still there?"
+  "message": "Hello, are you available?"
 }
 ```
 
 #### B. Incoming Server Events
 
 1. **New Message Received (`message`)**:
-   Sent when either the visitor sends a message (echo) or an agent replies.
+   Sent whenever a message is posted by the visitor (echo) or an agent replies.
 ```json
 {
   "type": "message",
@@ -113,14 +117,14 @@ Send raw JSON over the WebSocket connection:
     "conversation_id": "3fa85f64-...",
     "sender_type": "EMPLOYEE",
     "sender_name": "Support Agent Alex",
-    "message": "I have checked your order status.",
-    "created_at": "2026-07-23T13:15:00.000Z"
+    "message": "I can help you with that!",
+    "created_at": "2026-10-26T14:15:00.000Z"
   }
 }
 ```
 
 2. **Agent Assigned (`agent_assigned`)**:
-   Sent when a support employee accepts the chat queue.
+   Sent in real time when a support agent accepts the chat.
 ```json
 {
   "type": "agent_assigned",
@@ -129,23 +133,43 @@ Send raw JSON over the WebSocket connection:
 }
 ```
 
-3. **Conversation Closed (`conversation_closed`)**:
-   Sent when the support agent closes the chat session.
+3. **Visitor Details Updated (`visitor_updated`)**:
+   Sent when a support agent updates the visitor's personal info from the dashboard.
 ```json
 {
-  "type": "conversation_closed"
+  "type": "visitor_updated",
+  "visitor": {
+    "id": "123e4567-...",
+    "uuid": "7c9e6679-...",
+    "name": "Jane Doe",
+    "display_name": "Jane Doe",
+    "email": "jane@example.com",
+    "phone": "+1987654321"
+  }
+}
+```
+
+4. **Conversation Deleted (`conversation_deleted`)**:
+   Sent when an agent or admin permanently deletes the conversation.
+```json
+{
+  "type": "conversation_deleted",
+  "conversation_id": "3fa85f64-..."
 }
 ```
 
 ---
 
-## 3. Ready-to-Use React Chat Widget Code
+## 3. Complete Drop-in React Chat Widget
+
+Below is the complete, self-contained React chat widget component. It requires **no forms**, connects anonymously immediately, handles `localStorage` persistence, auto-scrolls, and listens to real-time status and message events.
 
 ```jsx
 import React, { useState, useEffect, useRef } from "react";
 
-const API_BASE_URL = "http://localhost:8006";
-const WS_BASE_URL = "ws://localhost:8006";
+// Replace with your backend URL
+const API_BASE_URL = "http://localhost:8000";
+const WS_BASE_URL = "ws://localhost:8000";
 
 export default function VisitorChatWidget() {
   const [isOpen, setIsOpen] = useState(false);
@@ -155,35 +179,41 @@ export default function VisitorChatWidget() {
   const [visitorUuid, setVisitorUuid] = useState(
     () => localStorage.getItem("visitor_uuid") || null
   );
-  const [visitorName, setVisitorName] = useState(
-    () => localStorage.getItem("visitor_name") || ""
-  );
-  const [visitorEmail, setVisitorEmail] = useState(
-    () => localStorage.getItem("visitor_email") || ""
-  );
-  const [visitorPhone, setVisitorPhone] = useState(
-    () => localStorage.getItem("visitor_phone") || ""
-  );
-  const [hasSubmittedForm, setHasSubmittedForm] = useState(
-    () => !!localStorage.getItem("visitor_conversation_id")
+  const [displayName, setDisplayName] = useState(
+    () => localStorage.getItem("visitor_display_name") || "You"
   );
 
   const [messages, setMessages] = useState([]);
   const [inputText, setInputText] = useState("");
   const [agentName, setAgentName] = useState(null);
-  const [chatStatus, setChatStatus] = useState("DISCONNECTED"); // DISCONNECTED, CONNECTING, WAITING, ACTIVE, CLOSED
-  const [showProfileModal, setShowProfileModal] = useState(false);
-  const [isSubmittingForm, setIsSubmittingForm] = useState(false);
+  const [chatStatus, setChatStatus] = useState("DISCONNECTED"); // DISCONNECTED, CONNECTING, WAITING, ACTIVE
 
   const wsRef = useRef(null);
   const messagesEndRef = useRef(null);
 
-  // Auto-scroll to bottom of chat
+  // Auto-scroll to bottom on new message or open
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, isOpen, hasSubmittedForm]);
+  }, [messages, isOpen]);
 
-  // 1. Fetch message history for existing conversation
+  // Reset session helper (used if conversation is deleted or invalidated)
+  const resetSession = () => {
+    localStorage.removeItem("visitor_conversation_id");
+    localStorage.removeItem("visitor_uuid");
+    localStorage.removeItem("visitor_display_name");
+    setConversationId(null);
+    setVisitorUuid(null);
+    setDisplayName("You");
+    setMessages([]);
+    setAgentName(null);
+    setChatStatus("DISCONNECTED");
+    if (wsRef.current) {
+      wsRef.current.close();
+      wsRef.current = null;
+    }
+  };
+
+  // 1. Fetch past message history
   const fetchHistory = async (convId, vUuid) => {
     try {
       const queryParam = vUuid ? `?visitor_uuid=${vUuid}` : "";
@@ -191,29 +221,26 @@ export default function VisitorChatWidget() {
       if (res.ok) {
         const history = await res.json();
         setMessages(history);
+      } else if (res.status === 404 || res.status === 401 || res.status === 403) {
+        // Conversation deleted or invalid UUID — reset session cleanly
+        resetSession();
       }
     } catch (err) {
       console.error("Failed to fetch message history:", err);
     }
   };
 
-  // 2. Pre-Chat Form submission handler
-  const handleStartChatSession = async (e) => {
-    if (e) e.preventDefault();
-    if (!visitorName.trim() || !visitorEmail.trim()) return;
-
+  // 2. Start or resume anonymous chat session
+  const startOrResumeChat = async () => {
     try {
-      setIsSubmittingForm(true);
       setChatStatus("CONNECTING");
+      const currentUuid = visitorUuid || localStorage.getItem("visitor_uuid");
 
       const res = await fetch(`${API_BASE_URL}/chat/start`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          uuid: visitorUuid || undefined,
-          name: visitorName.trim(),
-          email: visitorEmail.trim(),
-          phone: visitorPhone.trim() || undefined,
+          uuid: currentUuid || undefined,
         }),
       });
 
@@ -222,25 +249,24 @@ export default function VisitorChatWidget() {
       const data = await res.json();
       setConversationId(data.conversation_id);
       setVisitorUuid(data.visitor_uuid);
-      setHasSubmittedForm(true);
+      setDisplayName(data.display_name || "You");
 
       localStorage.setItem("visitor_conversation_id", data.conversation_id);
       localStorage.setItem("visitor_uuid", data.visitor_uuid);
-      localStorage.setItem("visitor_name", visitorName.trim());
-      localStorage.setItem("visitor_email", visitorEmail.trim());
+      if (data.display_name) {
+        localStorage.setItem("visitor_display_name", data.display_name);
+      }
 
       await fetchHistory(data.conversation_id, data.visitor_uuid);
     } catch (err) {
-      console.error("Pre-chat submission error:", err);
+      console.error("Chat initialization error:", err);
       setChatStatus("DISCONNECTED");
-    } finally {
-      setIsSubmittingForm(false);
     }
   };
 
   // 3. Connect WebSocket when conversationId is available
   useEffect(() => {
-    if (!conversationId || !hasSubmittedForm) return;
+    if (!conversationId) return;
 
     const ws = new WebSocket(`${WS_BASE_URL}/ws/visitor/${conversationId}`);
     wsRef.current = ws;
@@ -260,36 +286,47 @@ export default function VisitorChatWidget() {
       } else if (data.type === "agent_assigned") {
         setAgentName(data.assigned_employee_name);
         setChatStatus("ACTIVE");
-      } else if (data.type === "conversation_closed") {
-        setChatStatus("CLOSED");
+      } else if (data.type === "visitor_updated") {
+        // Support agent updated visitor details from dashboard
+        if (data.visitor?.display_name) {
+          setDisplayName(data.visitor.display_name);
+          localStorage.setItem("visitor_display_name", data.visitor.display_name);
+        }
+      } else if (data.type === "conversation_deleted") {
+        // Conversation deleted by agent — reset session for a fresh start
+        resetSession();
       }
     };
 
     ws.onclose = () => {
-      setChatStatus((prev) => (prev === "CLOSED" ? "CLOSED" : "DISCONNECTED"));
+      setChatStatus("DISCONNECTED");
     };
 
     return () => {
       if (ws) ws.close();
     };
-  }, [conversationId, hasSubmittedForm]);
+  }, [conversationId]);
 
-  // Handle open widget
+  // Handle open / toggle widget
   const handleToggleWidget = () => {
     const nextOpen = !isOpen;
     setIsOpen(nextOpen);
-    if (nextOpen && conversationId && hasSubmittedForm) {
-      fetchHistory(conversationId, visitorUuid);
+    if (nextOpen) {
+      if (!conversationId) {
+        startOrResumeChat();
+      } else {
+        fetchHistory(conversationId, visitorUuid);
+      }
     }
   };
 
   // 4. Send Message over WebSocket
   const handleSendMessage = (e) => {
     e.preventDefault();
-    if (!inputText.trim() || chatStatus === "CLOSED") return;
+    if (!inputText.trim()) return;
 
     if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
-      handleStartChatSession();
+      startOrResumeChat();
       return;
     }
 
@@ -301,9 +338,17 @@ export default function VisitorChatWidget() {
     setInputText("");
   };
 
+  const formatTime = (timeStr) => {
+    try {
+      return new Date(timeStr).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    } catch {
+      return "";
+    }
+  };
+
   return (
     <div style={{ position: "fixed", bottom: 24, right: 24, zIndex: 99999, fontFamily: "sans-serif" }}>
-      {/* Floating Trigger Button */}
+      {/* Floating Widget Trigger Button */}
       {!isOpen && (
         <button
           onClick={handleToggleWidget}
@@ -320,13 +365,17 @@ export default function VisitorChatWidget() {
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
+            transition: "transform 0.2s ease",
           }}
+          onMouseEnter={(e) => (e.currentTarget.style.transform = "scale(1.08)")}
+          onMouseLeave={(e) => (e.currentTarget.style.transform = "scale(1)")}
+          title="Chat with Support"
         >
           💬
         </button>
       )}
 
-      {/* Floating Panel */}
+      {/* Floating Chat Panel */}
       {isOpen && (
         <div
           style={{
@@ -342,60 +391,161 @@ export default function VisitorChatWidget() {
             overflow: "hidden",
           }}
         >
-          {/* Header */}
-          <div style={{ padding: "14px 18px", backgroundColor: "#27272a", borderBottom: "1px solid #3f3f46", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <div>
-              <strong style={{ display: "block", fontSize: 14, color: "#ffffff" }}>TradeAdmin Support</strong>
-              <small style={{ color: "#a1a1aa", fontSize: 11 }}>
-                {!hasSubmittedForm
-                  ? "Pre-Chat Registration"
-                  : chatStatus === "ACTIVE"
-                  ? `Connected with ${agentName || "Agent"}`
-                  : chatStatus === "WAITING"
-                  ? "Waiting for an available agent..."
-                  : "Conversation closed"}
-              </small>
+          {/* Header Bar */}
+          <div
+            style={{
+              padding: "14px 18px",
+              backgroundColor: "#27272a",
+              borderBottom: "1px solid #3f3f46",
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <div
+                style={{
+                  width: 36,
+                  height: 36,
+                  borderRadius: "50%",
+                  backgroundColor: "#0d9488",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  fontWeight: "bold",
+                  fontSize: 16,
+                }}
+              >
+                🎧
+              </div>
+              <div>
+                <strong style={{ display: "block", fontSize: 14, color: "#ffffff" }}>
+                  Live Support
+                </strong>
+                <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 2 }}>
+                  <span
+                    style={{
+                      width: 8,
+                      height: 8,
+                      borderRadius: "50%",
+                      backgroundColor:
+                        chatStatus === "ACTIVE"
+                          ? "#22c55e"
+                          : chatStatus === "WAITING"
+                          ? "#eab308"
+                          : "#9ca3af",
+                    }}
+                  />
+                  <small style={{ color: "#a1a1aa", fontSize: 11 }}>
+                    {chatStatus === "ACTIVE"
+                      ? `Connected with ${agentName || "Agent"}`
+                      : chatStatus === "WAITING"
+                      ? "Waiting for an agent..."
+                      : "Connecting..."}
+                  </small>
+                </div>
+              </div>
             </div>
-            <button onClick={() => setIsOpen(false)} style={{ background: "none", border: "none", color: "#a1a1aa", cursor: "pointer", fontSize: 18 }}>✕</button>
+
+            <button
+              onClick={() => setIsOpen(false)}
+              style={{ background: "none", border: "none", color: "#a1a1aa", cursor: "pointer", fontSize: 18 }}
+              title="Close chat"
+            >
+              ✕
+            </button>
           </div>
 
-          {/* Pre-Chat Registration Form */}
-          {!hasSubmittedForm ? (
-            <form onSubmit={handleStartChatSession} style={{ flex: 1, padding: 24, display: "flex", flexDirection: "column", justifyContent: "center", gap: 16 }}>
-              <div style={{ textAlign: "center" }}>
-                <h3 style={{ margin: "0 0 6px 0", fontSize: 16, color: "#ffffff" }}>👋 Welcome to Support</h3>
-                <p style={{ margin: 0, fontSize: 12, color: "#a1a1aa" }}>Please fill in your details below so our support team can assist you right away.</p>
+          {/* Messages Container */}
+          <div style={{ flex: 1, padding: 16, overflowY: "auto", display: "flex", flexDirection: "column", gap: 12 }}>
+            {messages.length === 0 ? (
+              <div style={{ textAlign: "center", color: "#71717a", fontSize: 13, marginTop: 50, lineHeight: 1.5 }}>
+                👋 Welcome! <br />
+                How can we help you today? Type a message below to start chatting with our team.
               </div>
-              <div>
-                <label style={{ display: "block", fontSize: 11, fontWeight: "bold", color: "#a1a1aa", marginBottom: 6 }}>FULL NAME *</label>
-                <input type="text" required placeholder="e.g. Jane Doe" value={visitorName} onChange={(e) => setVisitorName(e.target.value)} style={{ width: "100%", boxSizing: "border-box", padding: "10px 14px", backgroundColor: "#27272a", border: "1px solid #3f3f46", color: "#ffffff", borderRadius: 10, fontSize: 13 }} />
-              </div>
-              <div>
-                <label style={{ display: "block", fontSize: 11, fontWeight: "bold", color: "#a1a1aa", marginBottom: 6 }}>EMAIL ADDRESS *</label>
-                <input type="email" required placeholder="e.g. jane@example.com" value={visitorEmail} onChange={(e) => setVisitorEmail(e.target.value)} style={{ width: "100%", boxSizing: "border-box", padding: "10px 14px", backgroundColor: "#27272a", border: "1px solid #3f3f46", color: "#ffffff", borderRadius: 10, fontSize: 13 }} />
-              </div>
-              <button type="submit" disabled={isSubmittingForm || !visitorName.trim() || !visitorEmail.trim()} style={{ padding: "12px 16px", backgroundColor: "#0d9488", color: "#ffffff", border: "none", borderRadius: 10, cursor: "pointer", fontWeight: "bold", fontSize: 14 }}>
-                {isSubmittingForm ? "Connecting..." : "Start Chatting →"}
-              </button>
-            </form>
-          ) : (
-            /* Active Chat Interface */
-            <>
-              <div style={{ flex: 1, padding: 16, overflowY: "auto", display: "flex", flexDirection: "column", gap: 12 }}>
-                {messages.map((msg) => (
-                  <div key={msg.id} style={{ alignSelf: msg.sender_type === "VISITOR" ? "flex-end" : "flex-start", maxWidth: "80%" }}>
-                    <div style={{ backgroundColor: msg.sender_type === "VISITOR" ? "#0d9488" : "#27272a", color: "#fff", padding: "10px 14px", borderRadius: 12, fontSize: 13 }}>{msg.message}</div>
-                    <div style={{ fontSize: 9, color: "#71717a", marginTop: 4 }}>{msg.sender_name} • {formatTime(msg.created_at)}</div>
+            ) : (
+              messages.map((msg) => {
+                const isVisitor = msg.sender_type === "VISITOR";
+                return (
+                  <div
+                    key={msg.id}
+                    style={{
+                      alignSelf: isVisitor ? "flex-end" : "flex-start",
+                      maxWidth: "80%",
+                      display: "flex",
+                      flexDirection: "column",
+                      alignItems: isVisitor ? "flex-end" : "flex-start",
+                    }}
+                  >
+                    <div
+                      style={{
+                        backgroundColor: isVisitor ? "#0d9488" : "#27272a",
+                        color: isVisitor ? "#ffffff" : "#e4e4e7",
+                        padding: "10px 14px",
+                        borderRadius: isVisitor ? "16px 16px 2px 16px" : "16px 16px 16px 2px",
+                        fontSize: 13,
+                        lineHeight: 1.4,
+                        border: isVisitor ? "none" : "1px solid #3f3f46",
+                        wordBreak: "break-word",
+                      }}
+                    >
+                      {msg.message}
+                    </div>
+                    <div style={{ fontSize: 9, color: "#71717a", marginTop: 4, padding: "0 2px" }}>
+                      {isVisitor ? displayName : msg.sender_name || "Agent"} • {formatTime(msg.created_at)}
+                    </div>
                   </div>
-                ))}
-                <div ref={messagesEndRef} />
-              </div>
-              <form onSubmit={handleSendMessage} style={{ padding: 12, backgroundColor: "#27272a", display: "flex", gap: 8 }}>
-                <input type="text" placeholder="Type your message..." value={inputText} onChange={(e) => setInputText(e.target.value)} style={{ flex: 1, padding: "10px 14px", backgroundColor: "#18181b", border: "1px solid #3f3f46", color: "#fff", borderRadius: 10, fontSize: 13 }} />
-                <button type="submit" style={{ padding: "10px 16px", backgroundColor: "#0d9488", color: "#fff", border: "none", borderRadius: 10, fontWeight: "bold" }}>Send</button>
-              </form>
-            </>
-          )}
+                );
+              })
+            )}
+            <div ref={messagesEndRef} />
+          </div>
+
+          {/* Input Footer */}
+          <form
+            onSubmit={handleSendMessage}
+            style={{
+              padding: 12,
+              backgroundColor: "#27272a",
+              borderTop: "1px solid #3f3f46",
+              display: "flex",
+              gap: 8,
+            }}
+          >
+            <input
+              type="text"
+              placeholder="Type your message..."
+              value={inputText}
+              onChange={(e) => setInputText(e.target.value)}
+              style={{
+                flex: 1,
+                padding: "10px 14px",
+                backgroundColor: "#18181b",
+                border: "1px solid #3f3f46",
+                color: "#ffffff",
+                borderRadius: 10,
+                fontSize: 13,
+                outline: "none",
+              }}
+            />
+            <button
+              type="submit"
+              disabled={!inputText.trim()}
+              style={{
+                padding: "10px 16px",
+                backgroundColor: !inputText.trim() ? "#3f3f46" : "#0d9488",
+                color: !inputText.trim() ? "#71717a" : "#ffffff",
+                border: "none",
+                borderRadius: 10,
+                cursor: !inputText.trim() ? "not-allowed" : "pointer",
+                fontWeight: "bold",
+                fontSize: 13,
+                transition: "background-color 0.2s ease",
+              }}
+            >
+              Send
+            </button>
+          </form>
         </div>
       )}
     </div>
@@ -405,10 +555,10 @@ export default function VisitorChatWidget() {
 
 ---
 
-## 4. Summary Checklist
+## 4. Summary Checklist for Integration
 
-- [x] Pre-Chat Registration Form requires Visitor Name & Email before session creation.
-- [x] Initial request `POST /chat/start` sends `{ name, email, phone }`.
-- [x] Save `visitor_uuid`, `visitor_name`, and `visitor_email` in `localStorage`.
-- [x] Fetch history with `GET /conversations/{id}/messages?visitor_uuid={uuid}`.
-- [x] Real-time bidirectional WebSocket connection to `ws://localhost:8006/ws/visitor/{id}`.
+- [x] **No forms**: Calling `POST /chat/start` with `{}` or `{ "uuid": stored_uuid }` creates/resumes the session.
+- [x] **Local Persistence**: Save `visitor_uuid` in `localStorage` to reuse across tabs and reloads.
+- [x] **Agent Updates Info**: Support agent can update visitor's details at any time using `POST /visitor/update`.
+- [x] **Live Updates**: Widget listens to `visitor_updated` WebSocket event to update the visitor's name in real time.
+- [x] **Instant Reset on Deletion**: Widget listens to `conversation_deleted` WebSocket event to clean up `localStorage` and reset session state cleanly.
