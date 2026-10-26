@@ -1,8 +1,11 @@
 import enum
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Optional, TYPE_CHECKING
 from sqlmodel import SQLModel, Field, Relationship
+
+def utc_now() -> datetime:
+    return datetime.now(timezone.utc)
 
 if TYPE_CHECKING:
     from app.models.employee import Employee
@@ -37,7 +40,7 @@ class Conversation(SQLModel, table=True):
         nullable=False
     )
     created_at: datetime = Field(
-        default_factory=datetime.utcnow,
+        default_factory=utc_now,
         nullable=False
     )
     closed_at: Optional[datetime] = Field(

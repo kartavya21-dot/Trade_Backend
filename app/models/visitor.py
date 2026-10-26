@@ -1,8 +1,11 @@
 import uuid
 from uuid import UUID
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Optional, TYPE_CHECKING
 from sqlmodel import SQLModel, Field, Relationship
+
+def utc_now() -> datetime:
+    return datetime.now(timezone.utc)
 
 if TYPE_CHECKING:
     from app.models.conversation import Conversation
@@ -26,7 +29,7 @@ class Visitor(SQLModel, table=True):
     name: Optional[str] = Field(default=None, nullable=True)
     phone: Optional[str] = Field(default=None, nullable=True)
     email: Optional[str] = Field(default=None, nullable=True)
-    created_at: datetime = Field(default_factory=datetime.utcnow, nullable=False)
+    created_at: datetime = Field(default_factory=utc_now, nullable=False)
 
     # Relationships
     conversations: List["Conversation"] = Relationship(back_populates="visitor")
